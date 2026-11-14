@@ -94,11 +94,12 @@ test.describe('Schedule', () => {
   test('track pills toggle: add a track, add another, remove one, clear', async ({ page, request }) => {
     const { tracks } = await (await request.get(`${API}/bootstrap`)).json();
     const [a, b] = tracks;
+    const [day] = await conferenceDays();  // the pinned clock opens the schedule on Day 1
     const count = async (slugs) => {
-      const found = await (await request.get(`${API}/sessions?trackSlug=${slugs.join(',')}`)).json();
+      const found = await (await request.get(`${API}/sessions?day=${day}&trackSlug=${slugs.join(',')}`)).json();
       return (Array.isArray(found) ? found : found.sessions).length;
     };
-    const total = (await (await request.get(`${API}/sessions`)).json()).length;
+    const total = (await (await request.get(`${API}/sessions?day=${day}`)).json()).length;
     const label = (t) => t.shortName ?? t.name;
     const pill = (t) => page.getByRole('button', { name: label(t), exact: true });
     const shown = (n) => expect(page.getByTestId('result-count')).toContainText(`${n} sessions`);
