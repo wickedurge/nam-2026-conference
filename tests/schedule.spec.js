@@ -91,6 +91,51 @@ test.describe('Schedule', () => {
     await expect(page.getByRole('heading', { name: 'No sessions match', exact: true })).toBeVisible();
   });
 
+  test('track pills toggle: add a track, add another, remove one, clear', async ({ page, request }) => {
+    const { tracks } = await (await request.get(`${API}/bootstrap`)).json();
+    const [a, b] = tracks;
+    const [day] = await conferenceDays();  // the pinned clock opens the schedule on Day 1
+    const count = async (slugs) => {
+      const found = await (await request.get(`${API}/sessions?day=${day}&trackSlug=${slugs.join(',')}`)).json();
+      return (Array.isArray(found) ? found : found.sessions).length;
+    };
+    const total = (await (await request.get(`${API}/sessions?day=${day}`)).json()).length;
+    const label = (t) => t.shortName ?? t.name;
+    const pill = (t) => page.getByRole('button', { name: label(t), exact: true });
+    const shown = (n) => expect(page.getByTestId('result-count')).toContainText(`${n} sessions`);
+
+    await visit(page, '/schedule?view=list', { at: await momentOn(0, MID_SESSION_TIME) });
+    await waitForResults(page);
+    const filters = page.getByRole('button', { name: /^Filters/ });
+    if (await filters.isVisible()) await filters.click();
+
+    await pill(a).click();
+    await expect(pill(a)).toHaveAttribute('aria-pressed', 'true');
+    await shown(await count([a.slug]));
+
+    await pill(b).click();
+    await expect(pill(b)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(new RegExp(`track=${a.slug}(,|%2C)${b.slug}`));
+    await shown(await count([a.slug, b.slug]));
+    await expect(page.getByTestId('grid-blocked-notice')).toBeVisible();
+    await shotForPR(page, 'two tracks selected, list of both');
+
+    await pill(a).click();
+    await expect(pill(a)).toHaveAttribute('aria-pressed', 'false');
+    await shown(await count([b.slug]));
+
+    await pill(b).click();
+    await expect(page).not.toHaveURL(/track=/);
+    await shown(total);
+
+    await pill(a).click();
+    await pill(b).click();
+    await page.getByRole('button', { name: 'All', exact: true }).click();
+    await expect(page).not.toHaveURL(/track=/);
+    await expect(pill(a)).toHaveAttribute('aria-pressed', 'false');
+    await shown(total);
+  });
+
   test('Clear filters clears the search and brings sessions back', async ({ page }) => {
     await visit(page, '/schedule?q=zzqx&view=list');
     await page.getByRole('button', { name: 'Clear filters' }).click();
